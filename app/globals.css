@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-blush text-slate-900 antialiased;
+}
+
+.glass {
+  @apply bg-white/70 backdrop-blur-md shadow-card;
+}
+
+.gradient-border {
+  background: linear-gradient(135deg, #f9d1d1, #d7e6ff);
+  padding: 1px;
+  border-radius: 18px;
+}
+
+.break-keep {
+  word-break: keep-all;
+}
+
+.retro-text {
+  color: #f8fafc;
+  -webkit-text-stroke: 2px #0f172a;
+  text-shadow:
+    3px 3px 0 rgba(15, 23, 42, 0.9),
+    6px 6px 10px rgba(0, 0, 0, 0.35),
+    0 0 12px rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.02em;
+}
+
