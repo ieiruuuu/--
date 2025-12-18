@@ -11,7 +11,7 @@ type NavItem = {
 };
 
 const items: NavItem[] = [
-  { href: "/home", label: "홈", icon: <Home className="h-5 w-5" /> },
+  { href: "/", label: "홈", icon: <Home className="h-5 w-5" /> },
   { href: "/create", label: "글귀 생성", icon: <PlusSquare className="h-5 w-5" /> },
   { href: "/mypage", label: "마이페이지", icon: <User className="h-5 w-5" /> }
 ];

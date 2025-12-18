@@ -1,36 +1,23 @@
 import type { Metadata } from "next";
-import "./globals.css";
-import { Nanum_Myeongjo, Inter } from "next/font/google";
 import { BottomNav } from "./components/BottomNav";
-
-const display = Nanum_Myeongjo({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-display"
-});
-
-const body = Inter({
-  subsets: ["latin"],
-  variable: "--font-body"
-});
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "따뜻한 하루 카드",
-  description: "기분에 맞춘 감성 명언 카드를 만들고 공유하세요."
+  title: "감성 카드 만들기",
+  description: "나만의 감성 카드를 만들어보세요.",
 };
 
 export default function RootLayout({
-  children
+  children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <html lang="ko">
-      <body className={`${display.variable} ${body.variable}`}>
-        <div className="pb-24">{children}</div>
+      <body className="antialiased">
+        {children}
         <BottomNav />
       </body>
     </html>
   );
 }
-
