@@ -7,29 +7,44 @@ import { ChevronLeft, Wand2, Stars, Share2, Upload, X, Home as HomeIcon, PlusSqu
 import { auth, db } from "../firebase";
 import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
 
-// AI 카드용 랜덤 꽃 이미지 목록
-const AI_FLOWER_IMAGES: string[] = [
-  "https://images.unsplash.com/photo-1490750967868-88dd44867c80?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1462275646964-a0e3386b89fa?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1507290439931-a861b5a38200?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=900&q=80",
-  "https://images.unsplash.com/photo-1477414348463-c0eb7f1359b6?auto=format&fit=crop&w=900&q=80"
+// AI 카드용 랜덤 꽃 이미지 목록 (각 이미지마다 최적의 텍스트 색상 지정)
+type ImageTheme = {
+  url: string;
+  textColor: string; // Tailwind CSS 클래스
+};
+
+const AI_FLOWER_IMAGES: ImageTheme[] = [
+  { url: "https://images.unsplash.com/photo-1490750967868-88dd44867c80?auto=format&fit=crop&w=900&q=80", textColor: "text-yellow-300" }, // 어두운 배경
+  { url: "https://images.unsplash.com/photo-1462275646964-a0e3386b89fa?auto=format&fit=crop&w=900&q=80", textColor: "text-white" }, // 붉은 배경
+  { url: "https://images.unsplash.com/photo-1507290439931-a861b5a38200?auto=format&fit=crop&w=900&q=80", textColor: "text-yellow-200" }, // 어두운 배경
+  { url: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=900&q=80", textColor: "text-blue-900" }, // 밝은 배경
+  { url: "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=900&q=80", textColor: "text-white" }, // 어두운 배경
+  { url: "https://images.unsplash.com/photo-1477414348463-c0eb7f1359b6?auto=format&fit=crop&w=900&q=80", textColor: "text-yellow-300" } // 어두운 배경
 ];
 
+// 공통 카드 텍스트 스타일 (AI 모드와 직접 입력 모드 모두 동일)
+const cardTextStyles = {
+  className: "font-[var(--font-gowun-batang)] text-xl md:text-2xl font-extrabold leading-relaxed break-keep whitespace-pre-wrap text-white text-center drop-shadow-md",
+  style: {
+    textShadow: "0 2px 4px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4)",
+  } as React.CSSProperties
+};
+
 // 카드 디자인 컴포넌트
-type RetroCardProps = { text: string; background?: string; isAiMode?: boolean };
-function RetroCard({ text, background, isAiMode }: RetroCardProps) {
+type RetroCardProps = { text: string; background?: string; isAiMode?: boolean; selectedImageTheme?: ImageTheme };
+function RetroCard({ text, background, isAiMode, selectedImageTheme }: RetroCardProps) {
   // AI 모드일 때 한 번만 랜덤 이미지 선택
   const randomAiImage = useMemo(
-    () =>
-      AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)],
-    []
+    () => {
+      if (selectedImageTheme) return selectedImageTheme;
+      return AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)];
+    },
+    [selectedImageTheme]
   );
 
   const [imgError, setImgError] = useState(false);
 
-  const photoSrc = isAiMode ? randomAiImage : background;
+  const photoSrc = isAiMode ? randomAiImage.url : background;
   const hasPhotoBackground = !!photoSrc && !imgError;
 
   return (
@@ -44,18 +59,26 @@ function RetroCard({ text, background, isAiMode }: RetroCardProps) {
         />
       )}
 
-      {/* 어두운 오버레이 (사진 배경일 때 가독성 확보) */}
-      {hasPhotoBackground && <div className="absolute inset-0 bg-black/40" />}
+      {/* 어두운 오버레이 (통일된 스타일을 위해 옅게) */}
+      {hasPhotoBackground && (
+        <div className="absolute inset-0 bg-black/10" />
+      )}
+
+      {/* 텍스트 부분 그라데이션 오버레이 */}
+      {hasPhotoBackground && (
+        <div className="absolute inset-0 z-[5] bg-gradient-to-b from-black/20 via-transparent to-black/20 pointer-events-none" />
+      )}
 
       {/* 내용 */}
-      <div className="relative z-10 w-full">
-        <p
-          className={`font-semibold text-lg leading-relaxed break-keep whitespace-pre-wrap ${
-            hasPhotoBackground ? "text-white drop-shadow-md" : "text-slate-800"
-          }`}
-        >
-          {text || "내용이 없습니다."}
-        </p>
+      <div className="relative z-10 w-full flex items-center justify-center p-8">
+        <div className="max-w-[85%] w-full">
+          <p
+            className={cardTextStyles.className}
+            style={cardTextStyles.style}
+          >
+            {text || "내용이 없습니다."}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -104,6 +127,7 @@ export default function CreatePage() {
   const [error, setError] = useState<string | null>(null);
   const [retroText, setRetroText] = useState("");
   const [selectedImage, setSelectedImage] = useState(retroImages[0]);
+  const [selectedAiImageTheme, setSelectedAiImageTheme] = useState<ImageTheme | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +140,10 @@ export default function CreatePage() {
     if (!mood.trim()) { setError("오늘 기분을 간단히 적어주세요."); return; }
     setLoading(true); setError(null);
     try {
+      // 랜덤 이미지와 theme 선택
+      const randomImageTheme = AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)];
+      setSelectedAiImageTheme(randomImageTheme);
+      
       const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mood }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
@@ -149,7 +177,7 @@ export default function CreatePage() {
     const imageUrl =
       mode === "retro"
         ? selectedImage
-        : AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)];
+        : (selectedAiImageTheme?.url || AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)].url);
 
     if (!content.trim()) {
       alert("카드 내용이 비어 있어요.");
@@ -178,11 +206,17 @@ export default function CreatePage() {
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
         <div className="w-full max-w-md space-y-5 animate-in fade-in zoom-in duration-300">
-          <div ref={cardRef}><RetroCard text={mode === "retro" ? retroText : generatedQuote} background={mode === "retro" ? selectedImage : undefined} isAiMode={mode === 'ai'} /></div>
-          <div className="grid grid-cols-3 gap-3">
-            <button onClick={() => setShowResultModal(false)} className="flex items-center justify-center gap-1 rounded-xl bg-slate-700 py-3 text-sm font-bold text-white transition hover:bg-slate-600"><X className="h-4 w-4" /> 닫기</button>
-            <button onClick={() => alert("🚧 카카오톡 공유 기능은 추후 업데이트 예정입니다!")} className="flex items-center justify-center gap-1 rounded-xl bg-[#FEE500] py-3 text-sm font-bold text-[#191919] transition hover:bg-[#FDD835]"><Share2 className="h-4 w-4" /> 카톡 공유</button>
-            <button onClick={handlePostToFeed} className="flex items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-pink-300 to-purple-400 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:shadow-lg"><Upload className="h-4 w-4" /> 게시물 올리기</button>
+          <div ref={cardRef}><RetroCard text={mode === "retro" ? retroText : generatedQuote} background={mode === "retro" ? selectedImage : undefined} isAiMode={mode === 'ai'} selectedImageTheme={selectedAiImageTheme || undefined} /></div>
+          <div className="flex gap-3">
+            <button onClick={() => setShowResultModal(false)} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-slate-600 py-3 text-sm font-bold text-white transition hover:bg-slate-700">
+              <X className="h-4 w-4" /> 닫기
+            </button>
+            <button onClick={() => alert("🚧 카카오톡 공유 기능은 추후 업데이트 예정입니다!")} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-[#FEE500] py-3 text-sm font-bold text-[#191919] transition hover:bg-[#FDD835]">
+              <Share2 className="h-4 w-4" /> 카톡 공유
+            </button>
+            <button onClick={handlePostToFeed} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-pink-300 to-purple-400 py-3 text-sm font-bold text-white shadow-md transition hover:scale-105 hover:shadow-lg">
+              <Upload className="h-4 w-4" /> 게시물 올리기
+            </button>
           </div>
         </div>
       </div>
@@ -240,11 +274,23 @@ export default function CreatePage() {
 
         {/* 꾸미기 모드 화면 */}
         {mode === "retro" && (
-          <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-10">
+          <div className="flex flex-col space-y-6 animate-in slide-in-from-right duration-300 pb-10">
+            {/* 배경 이미지 선택 */}
             <div className="grid grid-cols-6 gap-2">
               {retroImages.map((img) => <button key={img} onClick={() => setSelectedImage(img)} className={`aspect-square w-full rounded-xl bg-cover bg-center border-2 transition-all ${selectedImage === img ? 'border-rose-500 scale-105 shadow-md z-10' : 'border-transparent opacity-70 hover:opacity-100'}`} style={{ backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />)}
             </div>
-            <textarea value={retroText} onChange={(e) => setRetroText(e.target.value)} placeholder="여기에 문구를 입력하세요" className="w-full h-32 rounded-2xl border border-rose-200 bg-white/80 p-4 text-lg focus:outline-none focus:ring-2 focus:ring-rose-200 placeholder:text-slate-400" />
+            
+            {/* 텍스트 입력창 */}
+            <div>
+              <textarea
+                value={retroText}
+                onChange={(e) => setRetroText(e.target.value)}
+                placeholder="여기에 소중한 마음을 적어보세요..."
+                className="w-full h-32 rounded-lg border border-slate-300 bg-white text-black p-4 text-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-300 resize-none placeholder:text-slate-400"
+              />
+            </div>
+
+            {/* 결과 보기 버튼 */}
             <button onClick={() => setShowResultModal(true)} className="w-full rounded-2xl bg-gradient-to-r from-rose-400 to-orange-300 py-4 font-bold text-white shadow-lg transition hover:scale-[1.02] hover:shadow-xl">완성하기</button>
           </div>
         )}
