@@ -16,8 +16,21 @@ const items: NavItem[] = [
   { href: "/mypage", label: "마이페이지", icon: <User className="h-5 w-5" /> }
 ];
 
+// 네비게이션 바를 숨길 경로들
+const hiddenPaths: string[] = [
+  "/upload",
+  "/share",
+  "/result"
+  // 필요 시 여기 카드 업로드 관련 추가 경로를 더 넣어주세요.
+];
+
 export function BottomNav() {
   const pathname = usePathname();
+
+  // 현재 경로가 hiddenPaths에 포함되면 네비게이션 바를 렌더링하지 않음
+  if (hiddenPaths.includes(pathname)) {
+    return null;
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 mx-auto max-w-xl border-t border-white/70 bg-white/80 px-4 py-3 backdrop-blur-lg shadow-[0_-6px_30px_-18px_rgba(0,0,0,0.25)]">

@@ -1,19 +1,61 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Wand2, Stars, Share2, Upload, X, Home as HomeIcon, PlusSquare, User } from "lucide-react";
+import { auth, db } from "../firebase";
+import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
+
+// AI 카드용 랜덤 꽃 이미지 목록
+const AI_FLOWER_IMAGES: string[] = [
+  "https://images.unsplash.com/photo-1490750967868-88dd44867c80?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1462275646964-a0e3386b89fa?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1507290439931-a861b5a38200?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1477414348463-c0eb7f1359b6?auto=format&fit=crop&w=900&q=80"
+];
 
 // 카드 디자인 컴포넌트
-type RetroCardProps = { text: string; background?: string; isAiMode?: boolean; };
+type RetroCardProps = { text: string; background?: string; isAiMode?: boolean };
 function RetroCard({ text, background, isAiMode }: RetroCardProps) {
+  // AI 모드일 때 한 번만 랜덤 이미지 선택
+  const randomAiImage = useMemo(
+    () =>
+      AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)],
+    []
+  );
+
+  const [imgError, setImgError] = useState(false);
+
+  const photoSrc = isAiMode ? randomAiImage : background;
+  const hasPhotoBackground = !!photoSrc && !imgError;
+
   return (
-    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl shadow-2xl border border-white/40 flex items-center justify-center text-center p-6" style={{ backgroundImage: background ? `url(${background})` : "linear-gradient(135deg, #fce1e5 0%, #e4edff 50%, #fdf5ff 100%)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
-      {background && <div className="absolute inset-0 bg-black/20" />}
+    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl shadow-2xl border border-white/40 flex items-center justify-center text-center p-6 bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50">
+      {/* 배경 이미지 (사진) */}
+      {hasPhotoBackground && (
+        <img
+          src={photoSrc}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setImgError(true)} // 로드 실패 시 사진 사용 중단
+        />
+      )}
+
+      {/* 어두운 오버레이 (사진 배경일 때 가독성 확보) */}
+      {hasPhotoBackground && <div className="absolute inset-0 bg-black/40" />}
+
+      {/* 내용 */}
       <div className="relative z-10 w-full">
-        {isAiMode && <p className="mb-4 text-xs uppercase tracking-[0.25em] text-slate-600/80 font-bold">AI CARD</p>}
-        <p className={`font-semibold text-lg leading-relaxed break-keep whitespace-pre-wrap ${background ? 'text-white drop-shadow-md' : 'text-slate-800'}`}>{text || "내용이 없습니다."}</p>
+        <p
+          className={`font-semibold text-lg leading-relaxed break-keep whitespace-pre-wrap ${
+            hasPhotoBackground ? "text-white drop-shadow-md" : "text-slate-800"
+          }`}
+        >
+          {text || "내용이 없습니다."}
+        </p>
       </div>
     </div>
   );
@@ -40,7 +82,18 @@ const retroImages = [
   "https://images.unsplash.com/photo-1555505019-8c3f1c96c9b9?auto=format&fit=crop&w=600&q=80",
 ];
 
-type CardData = { id: string; text: string; background?: string; date: string; author: string; authorImg: string; likes: number; isLiked: boolean; comments: any[]; };
+type CardData = {
+  id: string;
+  text: string;
+  background?: string;
+  date: string;
+  author: string;
+  authorUid?: string;
+  authorImg: string;
+  likes: number;
+  isLiked: boolean;
+  comments: any[];
+};
 
 export default function CreatePage() {
   const router = useRouter();
@@ -70,19 +123,60 @@ export default function CreatePage() {
     } catch (err) { console.error(err); setError("카드를 만들지 못했어요. 잠시 후 다시 시도해주세요."); } finally { setLoading(false); }
   };
 
-  const handlePostToFeed = () => {
-    const newCard: CardData = {
-      id: Date.now().toString(), text: mode === "retro" ? retroText : generatedQuote, background: mode === "retro" ? selectedImage : undefined, date: new Date().toLocaleDateString(), author: "나(Me)", authorImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", likes: 0, isLiked: false, comments: []
-    };
-    const existing = JSON.parse(localStorage.getItem("moodCards") || "[]");
-    localStorage.setItem("moodCards", JSON.stringify([newCard, ...existing]));
-    alert("피드에 성공적으로 게시되었습니다! 🎉"); router.push("/");
+  const handlePostToFeed = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      alert("로그인이 필요합니다.");
+      router.push("/login");
+      return;
+    }
+
+    // 1. Firestore에서 최신 닉네임 가져오기
+    let authorName = "이름 없음";
+    try {
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data() as any;
+        authorName = data.nickname || data.name || "이름 없음";
+      }
+    } catch (e) {
+      console.error("작성자 정보 불러오기 실패:", e);
+    }
+
+    // 2. 카드 내용 및 이미지 URL 설정
+    const content = mode === "retro" ? retroText : generatedQuote;
+    const imageUrl =
+      mode === "retro"
+        ? selectedImage
+        : AI_FLOWER_IMAGES[Math.floor(Math.random() * AI_FLOWER_IMAGES.length)];
+
+    if (!content.trim()) {
+      alert("카드 내용이 비어 있어요.");
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "feeds"), {
+        authorUid: user.uid,
+        authorName: authorName,
+        content,
+        imageUrl,
+        createdAt: serverTimestamp()
+      });
+
+      alert("피드에 성공적으로 게시되었습니다! 🎉");
+      router.push("/");
+    } catch (e) {
+      console.error("게시물 업로드 실패:", e);
+      alert("게시물 업로드 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    }
   };
 
   const Modal = () => {
     if (!showResultModal) return null;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
         <div className="w-full max-w-md space-y-5 animate-in fade-in zoom-in duration-300">
           <div ref={cardRef}><RetroCard text={mode === "retro" ? retroText : generatedQuote} background={mode === "retro" ? selectedImage : undefined} isAiMode={mode === 'ai'} /></div>
           <div className="grid grid-cols-3 gap-3">
